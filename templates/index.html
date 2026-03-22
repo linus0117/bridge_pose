@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+
+<head> 
+    <meta charset="UTF-8">
+    <title>橋式健身系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f4f4f4; }
+        .container { margin-top: 50px; }
+        .video-box { width: 640px; height: 480px; background: #000; margin: 0 auto; color: white; line-height: 480px; }
+        
+        /* 長條圖區域的樣式 */
+        .record-section { width: 80%; margin: 20px auto; background: white; padding: 20px; border-radius: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div style="text-align: right; padding: 10px;"> <button id="auth_btn">登入 / 註冊</button>
+        <!-- <button id="show_record_btn" style="display: block;">查看我的紀錄</button> -->
+    </div>
+
+    <div id="main_content" style="text-align: center; margin-top: 50px;">
+        <h1>橋式健身輔助系統</h1>
+        
+        <!-- <div class="video-box">視訊畫面預留區 (MediaPipe)
+
+        </div>
+         -->
+        <!-- <div id="timer" style="font-size: 80px; margin: 20px;">00:00:00</div>  -->
+
+        <button id="start_btn" style="padding: 15px 40px; font-size: 20px;">開始運動</button>
+<!-- 
+        <div id="counter_area" style="display: none; margin-top: 30px;">
+            <span style="color: green; font-size: 24px; margin-right: 20px;">
+                正確次數：<span id="correct_num">0</span>
+            </span>
+            <span style="color: red; font-size: 24px;">
+                錯誤次數：<span id="error_num">0</span>
+            </span>
+            <br><br> <button id="stop_btn" style="background-color: #ffcccc;">停止運動</button>
+        </div> -->
+
+        <div id="record_display_area" class="record-section">
+            <h3>最近 7 次運動紀錄 (長條圖)</h3>
+            <canvas id="myRecordChart"></canvas>
+            <br>
+            <!-- <button onclick="document.getElementById('record_display_area').style.display='none'">關閉圖表</button> -->
+        </div>
+    </div>
+
+    <div id="auth_page" style="display: none; text-align: center; margin-top: 50px;">
+            <h2>帳號管理</h2>
+            
+            <div id="auth_choice">
+                <button onclick="showRegisterForm()">我要註冊</button>
+                <button onclick="showLoginForm()">我要登入</button>
+            </div>
+
+            <div id="form_container" style="margin-top: 20px;"></div>
+
+            <br><br>
+            <button id="back_home_btn">返回主頁</button>
+        </div>
+
+    <script>
+        // 紀錄全域變數
+        let seconds = 0;       // 計數器
+        let timerId = null;    // 計數器編號
+        let currentUser = "";  // 現在是誰登入
+        let recordChart = null; // 用來存 Chart.js 實體
+
+        const startBtn = document.getElementById('start_btn');
+        // const counterArea = document.getElementById('counter_area');
+        const timerDisplay = document.getElementById('timer'); // 抓取顯示器
+        // const showRecordBtn = document.getElementById('show_record_btn');
+
+        startBtn.onclick = function() {
+            startBtn.style.display = 'none';
+            // counterArea.style.display = 'block';
+            // call backend/open_app
+            fetch('/open_app', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUser,
+                    })
+                }).then(res => res.json()).then(data => {
+                    console.log("紀錄存檔成功");
+                    loadWeeklyChart(currentUser); // 存完順便更新圖表數據
+                });
+        };
+
+        function updateTimer() {
+            seconds++; // 總秒數加 1
+            
+            // 算出時、分、秒
+            let hrs = Math.floor(seconds / 3600);           // 1小時 = 3600秒
+            let mins = Math.floor((seconds % 3600) / 60);   // 剩下的秒數除以60
+            let secs = seconds % 60;                        // 最後剩餘的秒數
+            
+            // 格式化：保證每個數字都是兩位數，例如 01, 05
+            let h = hrs < 10 ? "0" + hrs : hrs;
+            let m = mins < 10 ? "0" + mins : mins;
+            let s = secs < 10 ? "0" + secs : secs;
+                
+            // 更新到畫面上
+            timerDisplay.innerText = h + ":" + m + ":" + s;
+        }
+
+        // 抓取「停止按鈕」這個積木
+        // const stopBtn = document.getElementById('stop_btn');
+
+        // 設定點擊停止按鈕後要做的動作
+        // stopBtn.onclick = function() {
+        //     // 停止計時 (傳入我們啟動時記下的 timerId)
+        //     clearInterval(timerId);
+            
+        //     // 彈出一個提醒，告訴使用者運動了多久
+        //     alert("運動結束！您的總運動時間是：" + timerDisplay.innerText);
+            
+        //     // 補上：運動停止時自動存檔到資料庫
+        //     if (currentUser !== "") {
+        //         const totalSeconds = seconds;
+        //         const correctNum = document.getElementById('correct_num').innerText;
+        //         const errorNum = document.getElementById('error_num').innerText;
+
+                // fetch('/save_record', {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify({
+                //         username: currentUser,
+                //         correct: parseInt(correctNum),
+                //         error: parseInt(errorNum),
+                //         duration: totalSeconds
+                //     })
+                // }).then(res => res.json()).then(data => {
+                //     console.log("紀錄存檔成功");
+                //     loadWeeklyChart(currentUser); // 存完順便更新圖表數據
+                // });
+            // }
+
+        //     // 呼叫「重置畫面」的動作
+        //     resetUI();
+        // };
+
+        // 把畫面變回初始狀態
+        function resetUI() {
+            seconds = 0;                        // 秒數歸零
+            timerDisplay.innerText = "00:00:00"; // 顯示器歸零
+            startBtn.style.display = 'inline-block'; // 讓「開始按鈕」重新出現
+            // counterArea.style.display = 'none';      // 讓「計數區」重新隱身
+        }
+
+        // 登入註冊畫面的切換
+        const authBtn = document.getElementById('auth_btn');
+        const mainContent = document.getElementById('main_content');
+        const authPage = document.getElementById('auth_page');
+        const backHomeBtn = document.getElementById('back_home_btn');
+
+        // 點擊「登入/註冊」按鈕時
+        authBtn.onclick = function() {
+            mainContent.style.display = 'none'; // 藏起主畫面
+            authPage.style.display = 'block';    // 秀出登入頁
+        }
+
+        // 點擊「返回主頁」按鈕時
+        backHomeBtn.onclick = function() {
+            authPage.style.display = 'none';    // 藏起登入頁
+            mainContent.style.display = 'block'; // 秀出主畫面
+        }
+
+        // 註冊頁面
+        const formContainer = document.getElementById('form_container');
+
+        // 顯示註冊表單的內容
+        function showRegisterForm() {
+            formContainer.innerHTML = `
+                <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 10px; display: inline-block;">
+                    <h3>會員註冊</h3>
+                    <label>設定帳號：</label><br>
+                    <input type="text" id="reg_user" placeholder="請輸入帳號"><br><br>
+                    <label>設定密碼：</label><br>
+                    <input type="password" id="reg_pass" placeholder="請輸入密碼"><br><br>
+                    <button onclick="handleRegister()" style="padding: 5px 15px;">完成註冊</button>
+                </div>
+            `;
+        }
+
+        // 登入表單
+        function showLoginForm() {
+            formContainer.innerHTML = `
+                <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 10px; display: inline-block;">
+                    <h3>會員登入</h3>
+                    <input type="text" id="login_user" placeholder="帳號"><br><br>
+                    <input type="password" id="login_pass" placeholder="密碼"><br><br>
+                    <button onclick="handleLogin()" style="padding: 5px 15px;">登入</button>
+                </div>
+            `;
+        }
+
+        //註冊
+        function handleRegister() {
+            const u = document.getElementById('reg_user').value;
+            const p = document.getElementById('reg_pass').value;
+
+            if (u === "" || p === "") {
+                alert("不能留白喔！");
+                return;
+            }
+
+            // 使用 fetch 把資料寄給 Python 的 /register 路由
+            fetch('/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert(data.message);
+                    // 跳到登入畫面
+                    showLoginForm();
+                } else {
+                    alert("註冊失敗：" + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("連線伺服器失敗，請確認 Python 是否有啟動。");
+            });
+        }
+
+        // 登入處理
+        function handleLogin() {
+            const u = document.getElementById('login_user').value;
+            const p = document.getElementById('login_pass').value;
+
+            if (u === "" || p === "") {
+                alert("請輸入帳號和密碼！");
+                return;
+            }
+
+            // 使用 fetch 把資料傳給 Python 的 /login 路由檢查
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert(data.message + "，" + u + "！");
+                    
+                    // --- 登入成功後要做的事 ---
+                    currentUser = u;
+                    authBtn.innerText = "你好，" + u;
+                    // showRecordBtn.style.display = 'inline-block'; // 顯示紀錄按鈕
+                    
+                    // 登入成功後跳回主畫面
+                    authPage.style.display = 'none';
+                    mainContent.style.display = 'block';
+                    document.getElementById('record_display_area').style.display = 'block';
+                    loadWeeklyChart(currentUser);
+                    loadWeeklyChart(u); // 自動載入該使用者的數據圖表
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("連線失敗，請檢查後端是否正常。");
+            });
+        }
+
+        // 抓資料並畫成長條圖
+        function loadWeeklyChart(username) {
+            fetch(`/get_weekly_stats/${username}`)
+                .then(res => res.json())
+                .then(data => {
+                    const canvas = document.getElementById('myRecordChart');
+                    if (!canvas) return;
+                    
+                    const ctx = canvas.getContext('2d');
+                    if (recordChart) { recordChart.destroy(); }
+                    
+                    recordChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.labels,
+                            datasets: [
+                                {
+                                    label: '正確次數',
+                                    data: data.corrects, // 對應後端的正確數據
+                                    backgroundColor: 'rgba(32, 185, 28, 0.5)', // 綠色
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                    barPercentage: 1.0,
+                                    categoryPercentage: 0.8
+                                },
+                                {
+                                    label: '錯誤次數',
+                                    data: data.errors, 
+                                    backgroundColor: 'rgba(232, 55, 47, 0.5)', // 紅色
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    borderWidth: 1,
+                                    barPercentage: 1.0,//佔滿後 同一天的資料就可以併排在一起了
+                                    categoryPercentage: 0.8
+                                }
+                            ]
+                        },
+                        options: { 
+                            scales: { 
+                                x: { 
+                                    stacked: false // <--- X 軸堆疊
+                                },
+                                y: { 
+                                    stacked: false, // <--- Y 軸堆疊
+                                    beginAtZero: true 
+                                } 
+                            }
+                        }
+                    });
+                });
+        }
+
+        //查看我的紀錄
+        // showRecordBtn.onclick = function() {
+        //     document.getElementById('record_display_area').style.display = 'block';
+        //     loadWeeklyChart(currentUser);
+        // };
+    </script>
+</body>
+</html>
